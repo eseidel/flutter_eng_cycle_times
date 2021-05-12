@@ -1,6 +1,5 @@
-Uri compareTagsUrl({required String newerHash, required String olderHash}) {
-  return Uri.parse(
-      'https://api.github.com/repos/flutter/flutter/compare/$olderHash...$newerHash');
+String compareTagsUrl({required String newerHash, required String olderHash}) {
+  return '/repos/flutter/flutter/compare/$olderHash...$newerHash';
 }
 
 class Commit {

@@ -15,3 +15,4 @@ dependencies:
   github: ^8.1.0
   http: ^0.13.3
   dio_cache_interceptor: ^2.3.1
+  stats: ^2.0.0

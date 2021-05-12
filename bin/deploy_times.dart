@@ -1,15 +1,10 @@
-import 'package:github/github.dart';
-import 'dart:convert';
 import 'package:flutter_eng_cycle_times/flutter_releases.dart';
 import 'package:flutter_eng_cycle_times/github.dart';
+import 'package:stats/stats.dart';
 import 'package:flutter_eng_cycle_times/network.dart';
+import 'package:github/github.dart' as gh;
 
 // Calculate the time per-PR from creation until release.
-
-// releases
-// https://storage.googleapis.com/flutter_infra_release/releases/releases_windows.json
-// https://storage.googleapis.com/flutter_infra_release/releases/releases_macos.json
-// https://storage.googleapis.com/flutter_infra_release/releases/releases_linux.json
 
 // Get the associated commit for a given release
 // Get the associated commit for the previous release.
@@ -26,29 +21,39 @@ import 'package:flutter_eng_cycle_times/network.dart';
 // For any given PR find
 // Last touch from author
 // Merge date in repo
-// Date branch published with that change.
+// Date branch published with that change.hg
 
 // Do we need to deal with reverts?
 
-void printTags(GitHub github) {
-  // Flutter doesn't seem to have official "github releases", just tags.
-  // Have to fetch all tags, get the date associated with the commit
-  // cache them all and sort by commit date order.
-  // https://stackoverflow.com/questions/19452244/github-api-v3-order-tags-by-creation-date
-  github.repositories
-      .listTags(RepositorySlug('flutter', 'flutter'))
-      .take(10)
-      .toList()
-      .then((tags) {
-    for (final tag in tags) {
-      print(tag);
-    }
-  });
+// void printTags(GitHub github) {
+//   // Flutter doesn't seem to have official "github releases", just tags.
+//   // Have to fetch all tags, get the date associated with the commit
+//   // cache them all and sort by commit date order.
+//   // https://stackoverflow.com/questions/19452244/github-api-v3-order-tags-by-creation-date
+//   github.repositories
+//       .listTags(RepositorySlug('flutter', 'flutter'))
+//       .take(10)
+//       .toList()
+//       .then((tags) {
+//     for (final tag in tags) {
+//       print(tag);
+//     }
+//   });
+// }
+
+class ChangeTiming {
+  int pullNumber;
+  DateTime createTime;
+  DateTime mergeTime;
+  DateTime devReleaseTime;
+  ChangeTiming(
+      {required this.pullNumber,
+      required this.createTime,
+      required this.mergeTime,
+      required this.devReleaseTime});
 }
 
 void main(List<String> arguments) async {
-  // var github = GitHub(auth: findAuthenticationFromEnvironment());
-
   var releases = await fetchReleases(ReleasePlatform.mac);
   var latest = releases.latest(ReleaseChannel.dev);
   var penultimate =
@@ -57,13 +62,16 @@ void main(List<String> arguments) async {
   print(latest.version);
   print(penultimate.version);
 
-  var compareUri =
+  // Could this use github.GitHubComparison instead?
+  var compareUrl =
       compareTagsUrl(newerHash: latest.hash, olderHash: penultimate.hash);
-  var response = await dio.getUri(compareUri);
-  var compareResult = CompareResult.fromJson(response.data);
+  var response = await github.getJSON(compareUrl);
+  var compareResult = CompareResult.fromJson(response);
   var prs = Set<int>.from(compareResult.commits
       .where((commit) => commit.issueId != null)
       .map((commit) => commit.issueId));
+
+  print(prs);
 
   var commitsByPrId = <int?, List<Commit>>{};
   for (var commit in compareResult.commits) {
@@ -80,6 +88,38 @@ void main(List<String> arguments) async {
       print(commit.title);
     }
   }
+
+  print('Caching ${prs.length} prs...');
+  var timings = <ChangeTiming>[];
+  for (var issueId in prs) {
+    var url = '/repos/flutter/flutter/pulls/$issueId';
+    var response = await github.getJSON(url);
+    var pull = gh.PullRequest.fromJson(response);
+    var timing = ChangeTiming(
+        pullNumber: pull.number!,
+        createTime: pull.createdAt!,
+        mergeTime: pull.mergedAt!,
+        devReleaseTime: latest.releaseDate);
+    timings.add(timing);
+  }
+
+  void printStats(String label, Iterable<int> values) {
+    var stats = Stats.fromData(values);
+    print(label + ': ' + stats.withPrecision(3).toString());
+  }
+
+  printStats(
+      'merge hrs',
+      timings.map(
+          (timing) => timing.mergeTime.difference(timing.createTime).inHours));
+  printStats(
+      'release hrs',
+      timings.map((timing) =>
+          timing.devReleaseTime.difference(timing.mergeTime).inHours));
+  printStats(
+      'total hrs',
+      timings.map((timing) =>
+          timing.devReleaseTime.difference(timing.createTime).inHours));
 
   // Entirely reverts or reverts of reverts?
   // for (var issueId in commitsByPrId.keys) {

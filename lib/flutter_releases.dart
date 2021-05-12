@@ -46,6 +46,11 @@ ReleaseChannel channelByName(String name) {
   return channel;
 }
 
+// releases
+// https://storage.googleapis.com/flutter_infra_release/releases/releases_windows.json
+// https://storage.googleapis.com/flutter_infra_release/releases/releases_macos.json
+// https://storage.googleapis.com/flutter_infra_release/releases/releases_linux.json
+
 String releaseBaseUrl =
     'https://storage.googleapis.com/flutter_infra_release/releases';
 
@@ -57,13 +62,14 @@ class ReleaseInfo {
   final String hash;
   final ReleaseChannel channel;
   String version;
-  // DateTime releaseDate;
+  DateTime releaseDate;
   // String archivePath;
   // String sha256;
   ReleaseInfo.fromJson(dynamic release)
       : hash = release['hash'],
         channel = channelByName(release['channel']),
-        version = release['version'];
+        version = release['version'],
+        releaseDate = DateTime.parse(release['release_date']);
 }
 
 class RecentReleases {
@@ -85,6 +91,6 @@ class RecentReleases {
 
 Future<RecentReleases> fetchReleases(ReleasePlatform platform) async {
   var releasesUrl = releaseJsonUrlForPlatform(ReleasePlatform.mac);
-  var response = await dio.get(releasesUrl);
+  var response = await cachingDio.get(releasesUrl);
   return RecentReleases.fromJson(response.data);
 }
